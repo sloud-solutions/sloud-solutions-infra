@@ -1,0 +1,25 @@
+name: plan
+
+on:
+  pull_request:
+    paths:
+      - "stacks/**"
+      - "modules/**"
+      - "config/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [prod]
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: ${{ matrix.environment }}
+      action: plan

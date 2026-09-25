@@ -1,0 +1,32 @@
+name: apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "stacks/**"
+      - "modules/**"
+      - "config/**"
+      - "scripts/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to apply
+        type: choice
+        options: [prod]
+        default: prod
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-apply-${{ inputs.environment || 'prod' }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      environment: ${{ inputs.environment || 'prod' }}
+      action: apply

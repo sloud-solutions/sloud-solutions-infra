@@ -1,0 +1,72 @@
+name: terraform (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      action:
+        description: plan | apply
+        type: string
+        required: true
+
+permissions:
+  id-token: write # OIDC token for AWS; no static credentials anywhere
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Only `apply` binds to the protected environment (required reviewers).
+    environment: ${{ inputs.action == 'apply' && inputs.environment || null }}
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_git_sha: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Render config
+        run: scripts/render-config.sh "${{ inputs.environment }}" .rendered
+
+      - name: Validate config against schema
+        run: pipx run check-jsonschema --schemafile config/schema.json .rendered/merged.json
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.action == 'apply' && vars.AWS_APPLY_ROLE_ARN || vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init
+        working-directory: stacks/website
+        run: terraform init -input=false -backend-config=../../.rendered/backend.hcl
+
+      - name: Validate
+        working-directory: stacks/website
+        run: terraform validate
+
+      - name: Plan
+        working-directory: stacks/website
+        run: terraform plan -input=false -var-file=../../.rendered/stack.auto.tfvars.json -out=tfplan
+
+      - name: Plan summary
+        working-directory: stacks/website
+        run: |
+          {
+            echo '### Terraform plan (${{ inputs.environment }})'
+            echo '```'
+            terraform show -no-color tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply
+        if: inputs.action == 'apply'
+        working-directory: stacks/website
+        run: terraform apply -input=false tfplan

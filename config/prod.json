@@ -1,0 +1,9 @@
+{
+  "environment": "prod",
+  "backend": {
+    "key": "website/prod.tfstate"
+  },
+  "tags": {
+    "Env": "prod"
+  }
+}

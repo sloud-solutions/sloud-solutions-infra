@@ -1,0 +1,29 @@
+{
+  "project": "sloud-website",
+  "aws": {
+    "region": "us-east-1"
+  },
+  "backend": {
+    "bucket": "sloud-solutions-tfstate-639793187640",
+    "region": "us-east-1",
+    "encrypt": true,
+    "use_lockfile": true
+  },
+  "github": {
+    "org": "sloud-solutions",
+    "infra_repo": "sloud-solutions-infra",
+    "site_repo": "sloud-solutions-website",
+    "deploy_branch": "aws_website",
+    "apply_environments": ["prod"]
+  },
+  "website": {
+    "domain_name": null,
+    "include_www": true,
+    "price_class": "PriceClass_100",
+    "default_root_object": "index.html"
+  },
+  "tags": {
+    "Project": "sloud-website",
+    "ManagedBy": "terraform"
+  }
+}
