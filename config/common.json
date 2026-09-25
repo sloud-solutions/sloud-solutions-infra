@@ -22,7 +22,7 @@
   "website": {
     "domain_name": "sloudsolutions.com",
     "dns_provider": "external",
-    "attach_domain": false,
+    "attach_domain": true,
     "include_www": true,
     "price_class": "PriceClass_100",
     "default_root_object": "index.html"
