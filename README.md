@@ -44,13 +44,20 @@ To add an environment: add `config/<env>.json` and list it in the workflow matri
 
 The bucket name in `config/common.json` (`backend.bucket`) must be globally unique — change it before bootstrapping if taken.
 
-## Adding the custom domain later
+## Custom domain
 
-1. Set `website.domain_name` (e.g. `"example.com"`) in `config/common.json` or `config/prod.json`.
-2. Apply. The hosted zone is created first; the ACM certificate then waits for DNS validation.
-   While it waits, set the zone's `name_servers` output at your registrar (if you registered the
-   domain in Route 53, update the domain's nameservers to this zone's — registration creates its own zone).
-3. Once validated, CloudFront gets the alias and Route 53 gets A/AAAA records (apex and `www`).
+Set in `config/common.json` under `website`: `domain_name`, `dns_provider` and `attach_domain`.
+
+**`dns_provider: "external"`** (default; e.g. Cloudflare — no API tokens stored, records added by hand):
+1. `attach_domain: false` — apply creates only the ACM certificate. Add the `acm_validation_records`
+   output as CNAMEs at your DNS provider (DNS only, no proxy).
+2. `attach_domain: true` — apply waits until ACM issues the certificate, then adds the domain (apex and
+   `www`) to CloudFront. Add the `dns_records_to_add` output as CNAMEs (DNS only) pointing at the
+   CloudFront domain.
+3. Set the website repo variable `SITE_URL` to `https://<domain>` and re-run its deploy.
+
+**`dns_provider: "route53"`** — Terraform also creates the hosted zone and all records. Set the zone's
+`name_servers` output at the registrar (Route 53 registration creates its own zone; point it at ours).
 
 ## Notes
 

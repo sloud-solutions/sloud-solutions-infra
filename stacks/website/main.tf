@@ -8,17 +8,25 @@ locals {
   name        = "${var.project}-${var.environment}"
   domain_name = var.website.domain_name
   use_domain  = local.domain_name != null
+  use_route53 = local.use_domain && var.website.dns_provider == "route53"
 
-  aliases = local.use_domain ? compact([
+  # Phase 1 (attach_domain = false): only request the certificate.
+  # Phase 2 (attach_domain = true): wait for it to be issued, then serve the domain.
+  attach = local.use_domain && var.website.attach_domain
+
+  domain_names = local.use_domain ? compact([
     local.domain_name,
     var.website.include_www ? "www.${local.domain_name}" : null,
   ]) : []
+  aliases = local.attach ? local.domain_names : []
 }
 
 # --- Custom domain (only when website.domain_name is set) -------------------
+# DNS is either Route 53 (dns_provider = "route53") or external, e.g. Cloudflare
+# (records added by hand from the outputs).
 
 module "dns_zone" {
-  count  = local.use_domain ? 1 : 0
+  count  = local.use_route53 ? 1 : 0
   source = "../../modules/route53-zone"
 
   domain_name = local.domain_name
@@ -29,16 +37,17 @@ module "certificate" {
   source = "../../modules/acm-certificate"
 
   domain_name               = local.domain_name
-  subject_alternative_names = slice(local.aliases, 1, length(local.aliases))
-  zone_id                   = module.dns_zone[0].zone_id
+  subject_alternative_names = slice(local.domain_names, 1, length(local.domain_names))
+  zone_id                   = local.use_route53 ? module.dns_zone[0].zone_id : null
+  wait_for_validation       = local.attach
 }
 
 module "dns_records" {
-  count  = local.use_domain ? 1 : 0
+  count  = local.use_route53 && local.attach ? 1 : 0
   source = "../../modules/route53-records"
 
   zone_id                   = module.dns_zone[0].zone_id
-  names                     = local.aliases
+  names                     = local.domain_names
   cloudfront_domain_name    = module.cloudfront.domain_name
   cloudfront_hosted_zone_id = module.cloudfront.hosted_zone_id
 }
@@ -58,7 +67,7 @@ module "cloudfront" {
   name                        = local.name
   bucket_regional_domain_name = module.site_bucket.bucket_regional_domain_name
   aliases                     = local.aliases
-  acm_certificate_arn         = local.use_domain ? module.certificate[0].arn : null
+  acm_certificate_arn         = local.attach ? module.certificate[0].arn : null
   price_class                 = var.website.price_class
   default_root_object         = var.website.default_root_object
 }

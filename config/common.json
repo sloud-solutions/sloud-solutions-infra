@@ -20,7 +20,9 @@
     "apply_environments": ["prod"]
   },
   "website": {
-    "domain_name": null,
+    "domain_name": "sloudsolutions.com",
+    "dns_provider": "external",
+    "attach_domain": false,
     "include_www": true,
     "price_class": "PriceClass_100",
     "default_root_object": "index.html"

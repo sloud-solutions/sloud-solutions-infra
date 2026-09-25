@@ -26,6 +26,8 @@ variable "github" {
 variable "website" {
   type = object({
     domain_name         = optional(string)
+    dns_provider        = optional(string, "external")
+    attach_domain       = optional(bool, false)
     include_www         = bool
     price_class         = string
     default_root_object = string

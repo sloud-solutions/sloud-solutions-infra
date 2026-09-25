@@ -42,13 +42,15 @@
     },
     "website": {
       "type": "object",
-      "required": ["domain_name", "include_www", "price_class", "default_root_object"],
+      "required": ["domain_name", "dns_provider", "attach_domain", "include_www", "price_class", "default_root_object"],
       "additionalProperties": false,
       "properties": {
         "domain_name": {
           "type": ["string", "null"],
           "pattern": "^([a-z0-9-]+\\.)+[a-z]{2,}$"
         },
+        "dns_provider": { "enum": ["external", "route53"] },
+        "attach_domain": { "type": "boolean" },
         "include_www": { "type": "boolean" },
         "price_class": { "enum": ["PriceClass_100", "PriceClass_200", "PriceClass_All"] },
         "default_root_object": { "type": "string" }
