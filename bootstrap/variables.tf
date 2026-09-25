@@ -17,7 +17,9 @@ variable "backend" {
 variable "github" {
   type = object({
     org                = string
+    org_id             = string
     infra_repo         = string
+    infra_repo_id      = string
     apply_environments = list(string)
   })
 }

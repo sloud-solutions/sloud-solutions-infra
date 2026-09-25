@@ -5,5 +5,5 @@ data "aws_caller_identity" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
-  repo       = "${var.github.org}/${var.github.infra_repo}"
+  repo       = "${var.github.org}@${var.github.org_id}/${var.github.infra_repo}@${var.github.infra_repo_id}"
 }

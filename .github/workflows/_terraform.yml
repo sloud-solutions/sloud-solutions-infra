@@ -31,7 +31,7 @@ jobs:
           terraform_version: 1.10.5
 
       - name: Render config
-        run: scripts/render-config.sh "${{ inputs.environment }}" .rendered
+        run: bash scripts/render-config.sh "${{ inputs.environment }}" .rendered
 
       - name: Validate config against schema
         run: pipx run check-jsonschema --schemafile config/schema.json .rendered/merged.json

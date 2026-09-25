@@ -87,7 +87,7 @@ module "site_deploy_role" {
 
   name              = "${local.name}-site-deploy"
   oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
-  subjects          = ["repo:${var.github.org}/${var.github.site_repo}:ref:refs/heads/${var.github.deploy_branch}"]
+  subjects          = ["repo:${var.github.org}@${var.github.org_id}/${var.github.site_repo}@${var.github.site_repo_id}:ref:refs/heads/${var.github.deploy_branch}"]
 
   inline_policy_json = data.aws_iam_policy_document.site_deploy.json
 }

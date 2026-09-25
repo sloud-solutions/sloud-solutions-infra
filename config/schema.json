@@ -27,12 +27,15 @@
     },
     "github": {
       "type": "object",
-      "required": ["org", "infra_repo", "site_repo", "deploy_branch", "apply_environments"],
+      "required": ["org", "org_id", "infra_repo", "infra_repo_id", "site_repo", "site_repo_id", "deploy_branch", "apply_environments"],
       "additionalProperties": false,
       "properties": {
         "org": { "type": "string" },
+        "org_id": { "type": "string", "pattern": "^[0-9]+$" },
         "infra_repo": { "type": "string" },
+        "infra_repo_id": { "type": "string", "pattern": "^[0-9]+$" },
         "site_repo": { "type": "string" },
+        "site_repo_id": { "type": "string", "pattern": "^[0-9]+$" },
         "deploy_branch": { "type": "string" },
         "apply_environments": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
       }

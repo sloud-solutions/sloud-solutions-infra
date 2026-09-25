@@ -11,8 +11,11 @@
   },
   "github": {
     "org": "sloud-solutions",
+    "org_id": "327714801",
     "infra_repo": "sloud-solutions-infra",
+    "infra_repo_id": "1386566649",
     "site_repo": "sloud-solutions-website",
+    "site_repo_id": "1365085012",
     "deploy_branch": "aws_website",
     "apply_environments": ["prod"]
   },

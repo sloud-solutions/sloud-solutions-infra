@@ -15,8 +15,10 @@ variable "aws" {
 variable "github" {
   type = object({
     org           = string
+    org_id        = string
     infra_repo    = string
     site_repo     = string
+    site_repo_id  = string
     deploy_branch = string
   })
 }
