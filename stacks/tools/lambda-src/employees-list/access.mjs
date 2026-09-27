@@ -15,8 +15,17 @@ export function claims(event) {
 }
 
 export function isAdmin(event) {
-  const groups = claims(event)["cognito:groups"];
-  const list = Array.isArray(groups) ? groups : typeof groups === "string" ? groups.split(",") : [];
+  const raw = claims(event)["cognito:groups"];
+  if (!raw) return false;
+  // API Gateway's HTTP API JWT authorizer serializes an array claim as a
+  // bracketed string, e.g. "[Admin]" or "[Admin, Employee]" -- not clean CSV.
+  const list = Array.isArray(raw)
+    ? raw
+    : String(raw)
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
   return list.includes("Admin");
 }
 
