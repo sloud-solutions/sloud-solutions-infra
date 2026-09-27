@@ -51,7 +51,19 @@ async function anotherActiveAdminExists(excludeId) {
   return (res.Items ?? []).some((row) => row.id !== excludeId && isEnabled(row));
 }
 
-const EDITABLE_FIELDS = ["employeeId", "name", "role", "type", "skills", "workingMode", "phone", "location", "joined", "workDashboard"];
+const EDITABLE_FIELDS = ["name", "role", "type", "skills", "workingMode", "phone", "location", "joined", "workDashboard"];
+const EMPLOYEE_ID_RE = /^S[A-Z0-9]+$/;
+
+async function employeeIdTaken(employeeId, excludeId) {
+  const res = await ddb.send(
+    new ScanCommand({
+      TableName: process.env.EMPLOYEES_TABLE,
+      FilterExpression: "employeeId = :eid",
+      ExpressionAttributeValues: { ":eid": employeeId },
+    }),
+  );
+  return (res.Items ?? []).some((row) => row.id !== excludeId);
+}
 
 // Only Admins may edit, enable/disable, or remove a team member (creating one
 // is Admin-only too, via the separate admin-create-user Lambda) -- viewing
@@ -107,6 +119,17 @@ export const handler = async (event) => {
       names[`#${field}`] = field;
       values[`:${field}`] = field === "skills" ? (Array.isArray(body.skills) ? body.skills.map(String) : []) : String(body[field]);
       sets.push(`#${field} = :${field}`);
+    }
+
+    if (body.employeeId !== undefined) {
+      const employeeId = String(body.employeeId).toUpperCase();
+      if (!EMPLOYEE_ID_RE.test(employeeId)) return json(400, { message: "Employee ID must start with S, e.g. S1001." });
+      if (employeeId !== existing.Item.employeeId && (await employeeIdTaken(employeeId, id))) {
+        return json(409, { message: `Employee ID ${employeeId} is already in use.` });
+      }
+      names["#employeeId"] = "employeeId";
+      values[":employeeId"] = employeeId;
+      sets.push("#employeeId = :employeeId");
     }
 
     if (body.accountRole !== undefined) {

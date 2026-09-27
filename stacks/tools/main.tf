@@ -290,7 +290,7 @@ module "lambda_employees_write" {
 data "aws_iam_policy_document" "admin_create_user" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
-    actions   = ["dynamodb:PutItem"]
+    actions   = ["dynamodb:PutItem", "dynamodb:Scan"]
     resources = [module.employees_table.arn]
   }
   statement {

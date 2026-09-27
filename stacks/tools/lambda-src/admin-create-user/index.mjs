@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
@@ -35,7 +35,19 @@ async function uploadPhoto(employeeId, photoDataUrl) {
   return `https://${process.env.PHOTOS_DOMAIN}/${objectKey}`;
 }
 
-const REQUIRED_FIELDS = ["name", "role", "type", "workingMode", "email", "joined", "accountRole", "password"];
+const REQUIRED_FIELDS = ["employeeId", "name", "role", "type", "workingMode", "email", "joined", "accountRole", "password"];
+const EMPLOYEE_ID_RE = /^S[A-Z0-9]+$/;
+
+async function employeeIdTaken(employeeId) {
+  const res = await ddb.send(
+    new ScanCommand({
+      TableName: process.env.EMPLOYEES_TABLE,
+      FilterExpression: "employeeId = :eid",
+      ExpressionAttributeValues: { ":eid": employeeId },
+    }),
+  );
+  return (res.Items ?? []).length > 0;
+}
 
 // Admin-only: creates both the Cognito login and the Employees directory row,
 // together. The Admin sets the initial password directly (rather than relying
@@ -54,6 +66,10 @@ export const handler = async (event) => {
   const missing = REQUIRED_FIELDS.filter((f) => !body[f]);
   if (missing.length) return json(400, { message: `Missing field(s): ${missing.join(", ")}` });
   if (!["Admin", "Employee"].includes(body.accountRole)) return json(400, { message: "accountRole must be Admin or Employee." });
+
+  const employeeId = String(body.employeeId).toUpperCase();
+  if (!EMPLOYEE_ID_RE.test(employeeId)) return json(400, { message: "Employee ID must start with S, e.g. S1001." });
+  if (await employeeIdTaken(employeeId)) return json(409, { message: `Employee ID ${employeeId} is already in use.` });
 
   const access = body.accountRole === "Admin" ? ALL_PAGES : Array.isArray(body.access) ? body.access.filter((p) => ALL_PAGES.includes(p)) : [];
 
@@ -95,7 +111,7 @@ export const handler = async (event) => {
 
   const item = {
     id,
-    employeeId: String(body.employeeId ?? ""),
+    employeeId,
     name: String(body.name),
     role: String(body.role),
     type: String(body.type),
