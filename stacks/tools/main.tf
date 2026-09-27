@@ -129,6 +129,20 @@ module "photos_cloudfront" {
   default_root_object         = ""
 }
 
+# The expense-document upload is the first writer that PUTs to this bucket
+# directly from the browser (everything else uploads server-side from a
+# Lambda) -- S3 has no CORS rules by default, so that cross-origin PUT needs
+# to be explicitly allowed here.
+resource "aws_s3_bucket_cors_configuration" "photos" {
+  bucket = module.photos_bucket.id
+  cors_rule {
+    allowed_methods = ["PUT"]
+    allowed_origins = [local.site_url]
+    allowed_headers = ["content-type"]
+    max_age_seconds = 3000
+  }
+}
+
 # --- Data -----------------------------------------------------------------
 
 module "expenses_table" {
@@ -187,7 +201,7 @@ module "lambda_expenses_list" {
 data "aws_iam_policy_document" "expenses_write" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
-    actions   = ["dynamodb:PutItem", "dynamodb:DeleteItem"]
+    actions   = ["dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:UpdateItem"]
     resources = [module.expenses_table.arn]
   }
 }
@@ -361,6 +375,7 @@ module "http_api" {
     { route_key = "GET /expenses", lambda_invoke_arn = module.lambda_expenses_list.invoke_arn, lambda_function_name = module.lambda_expenses_list.name },
     { route_key = "POST /expenses", lambda_invoke_arn = module.lambda_expenses_write.invoke_arn, lambda_function_name = module.lambda_expenses_write.name },
     { route_key = "DELETE /expenses/{id}", lambda_invoke_arn = module.lambda_expenses_write.invoke_arn, lambda_function_name = module.lambda_expenses_write.name },
+    { route_key = "PATCH /expenses/{id}", lambda_invoke_arn = module.lambda_expenses_write.invoke_arn, lambda_function_name = module.lambda_expenses_write.name },
     { route_key = "POST /expenses/document-url", lambda_invoke_arn = module.lambda_expenses_document_presign.invoke_arn, lambda_function_name = module.lambda_expenses_document_presign.name },
     { route_key = "GET /employees", lambda_invoke_arn = module.lambda_employees_list.invoke_arn, lambda_function_name = module.lambda_employees_list.name },
     { route_key = "DELETE /employees/{id}", lambda_invoke_arn = module.lambda_employees_write.invoke_arn, lambda_function_name = module.lambda_employees_write.name },
