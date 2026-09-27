@@ -59,5 +59,6 @@ export async function callerAccess(event, ddb) {
     role: admin ? "Admin" : row?.accountRole ?? "Employee",
     access: admin ? ALL_PAGES : row?.access ?? [],
     name: row?.name ?? email ?? "",
+    jobTitle: row?.role ?? "",
   };
 }
