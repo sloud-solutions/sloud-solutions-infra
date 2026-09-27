@@ -16,7 +16,10 @@
     "infra_repo_id": "1386566649",
     "site_repo": "sloud-solutions-website",
     "site_repo_id": "1365085012",
+    "tools_repo": "sloud-solutions-tools",
+    "tools_repo_id": "1390464067",
     "deploy_branch": "aws_website",
+    "tools_deploy_branch": "main",
     "apply_environments": ["prod"]
   },
   "website": {
@@ -24,6 +27,14 @@
     "dns_provider": "external",
     "attach_domain": true,
     "include_www": true,
+    "price_class": "PriceClass_100",
+    "default_root_object": "index.html"
+  },
+  "tools": {
+    "domain_name": null,
+    "dns_provider": "external",
+    "attach_domain": false,
+    "include_www": false,
     "price_class": "PriceClass_100",
     "default_root_object": "index.html"
   },

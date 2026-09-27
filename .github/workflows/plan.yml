@@ -18,8 +18,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [prod]
+        include:
+          - stack: website
+            environment: prod
+          - stack: tools
+            environment: prod
     uses: ./.github/workflows/_terraform.yml
     with:
+      stack: ${{ matrix.stack }}
       environment: ${{ matrix.environment }}
       action: plan

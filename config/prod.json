@@ -3,6 +3,9 @@
   "backend": {
     "key": "website/prod.tfstate"
   },
+  "backends": {
+    "tools": { "key": "tools/prod.tfstate" }
+  },
   "tags": {
     "Env": "prod"
   }

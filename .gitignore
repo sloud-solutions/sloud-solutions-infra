@@ -4,3 +4,5 @@
 tfplan
 crash.log
 .rendered/
+stacks/*/lambda-src/*/node_modules/
+modules/*/.build/
