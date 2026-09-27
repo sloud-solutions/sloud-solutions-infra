@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import {
   CognitoIdentityProviderClient,
   AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
   AdminAddUserToGroupCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -34,10 +35,12 @@ async function uploadPhoto(employeeId, photoDataUrl) {
   return `https://${process.env.PHOTOS_DOMAIN}/${objectKey}`;
 }
 
-const REQUIRED_FIELDS = ["name", "role", "type", "workingMode", "email", "joined", "accountRole"];
+const REQUIRED_FIELDS = ["name", "role", "type", "workingMode", "email", "joined", "accountRole", "password"];
 
-// Admin-only: creates both the Cognito login (temporary password, auto-emailed
-// by Cognito's built-in messaging) and the Employees directory row, together.
+// Admin-only: creates both the Cognito login and the Employees directory row,
+// together. The Admin sets the initial password directly (rather than relying
+// on Cognito's email invite) since these addresses aren't real mailboxes yet
+// -- share the password with the person out-of-band (chat, in person, etc.).
 export const handler = async (event) => {
   await callerAccess(event, ddb);
   if (!isAdmin(event)) return json(403, { message: "Only Admins can add a new team member." });
@@ -54,17 +57,31 @@ export const handler = async (event) => {
 
   const access = body.accountRole === "Admin" ? ALL_PAGES : Array.isArray(body.access) ? body.access.filter((p) => ALL_PAGES.includes(p)) : [];
 
-  await cognito.send(
-    new AdminCreateUserCommand({
-      UserPoolId: process.env.USER_POOL_ID,
-      Username: body.email,
-      DesiredDeliveryMediums: ["EMAIL"],
-      UserAttributes: [
-        { Name: "email", Value: body.email },
-        { Name: "email_verified", Value: "true" },
-      ],
-    }),
-  );
+  try {
+    await cognito.send(
+      new AdminCreateUserCommand({
+        UserPoolId: process.env.USER_POOL_ID,
+        Username: body.email,
+        MessageAction: "SUPPRESS",
+        UserAttributes: [
+          { Name: "email", Value: body.email },
+          { Name: "email_verified", Value: "true" },
+        ],
+      }),
+    );
+    await cognito.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: process.env.USER_POOL_ID,
+        Username: body.email,
+        Password: body.password,
+        Permanent: true,
+      }),
+    );
+  } catch (err) {
+    if (err.name === "InvalidPasswordException") return json(400, { message: err.message });
+    if (err.name === "UsernameExistsException") return json(409, { message: "That email is already registered." });
+    throw err;
+  }
   await cognito.send(
     new AdminAddUserToGroupCommand({
       UserPoolId: process.env.USER_POOL_ID,

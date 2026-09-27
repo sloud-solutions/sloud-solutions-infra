@@ -246,7 +246,7 @@ data "aws_iam_policy_document" "admin_create_user" {
     resources = [module.employees_table.arn]
   }
   statement {
-    actions   = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminAddUserToGroup"]
+    actions   = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminSetUserPassword", "cognito-idp:AdminAddUserToGroup"]
     resources = [module.user_pool.user_pool_arn]
   }
   statement {
@@ -266,6 +266,23 @@ module "lambda_admin_create_user" {
   })
   inline_policy_json = data.aws_iam_policy_document.admin_create_user.json
   tags               = var.tags
+}
+
+data "aws_iam_policy_document" "admin_reset_password" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["cognito-idp:AdminSetUserPassword"]
+    resources = [module.user_pool.user_pool_arn]
+  }
+}
+
+module "lambda_admin_reset_password" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-admin-reset-password"
+  source_dir            = "${path.module}/lambda-src/admin-reset-password"
+  environment_variables = merge(local.common_env, { USER_POOL_ID = module.user_pool.user_pool_id })
+  inline_policy_json    = data.aws_iam_policy_document.admin_reset_password.json
+  tags                  = var.tags
 }
 
 module "lambda_me" {
@@ -313,6 +330,7 @@ module "http_api" {
     { route_key = "GET /employees", lambda_invoke_arn = module.lambda_employees_list.invoke_arn, lambda_function_name = module.lambda_employees_list.name },
     { route_key = "DELETE /employees/{id}", lambda_invoke_arn = module.lambda_employees_write.invoke_arn, lambda_function_name = module.lambda_employees_write.name },
     { route_key = "POST /admin/users", lambda_invoke_arn = module.lambda_admin_create_user.invoke_arn, lambda_function_name = module.lambda_admin_create_user.name },
+    { route_key = "POST /admin/reset-password", lambda_invoke_arn = module.lambda_admin_reset_password.invoke_arn, lambda_function_name = module.lambda_admin_reset_password.name },
     { route_key = "GET /me", lambda_invoke_arn = module.lambda_me.invoke_arn, lambda_function_name = module.lambda_me.name },
   ]
 }
