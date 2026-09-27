@@ -33,20 +33,31 @@ export function callerEmail(event) {
   return claims(event).email;
 }
 
-/** Admins implicitly have every page; everyone else is whatever's on their Employees row. */
+/**
+ * Always looks up the caller's Employees row (needed for `name` regardless of
+ * role) -- but `role`/`access` for Admins still comes from the JWT group
+ * claim, not the row, so an Admin never loses access just because their
+ * directory row is missing or stale.
+ */
 export async function callerAccess(event, ddb) {
-  if (isAdmin(event)) return { role: "Admin", access: ALL_PAGES };
   const email = callerEmail(event);
-  if (!email) return { role: "Employee", access: [] };
-  const res = await ddb.send(
-    new QueryCommand({
-      TableName: process.env.EMPLOYEES_TABLE,
-      IndexName: process.env.EMPLOYEES_EMAIL_INDEX,
-      KeyConditionExpression: "email = :e",
-      ExpressionAttributeValues: { ":e": email },
-      Limit: 1,
-    }),
-  );
-  const row = res.Items?.[0];
-  return { role: row?.accountRole ?? "Employee", access: row?.access ?? [] };
+  let row;
+  if (email) {
+    const res = await ddb.send(
+      new QueryCommand({
+        TableName: process.env.EMPLOYEES_TABLE,
+        IndexName: process.env.EMPLOYEES_EMAIL_INDEX,
+        KeyConditionExpression: "email = :e",
+        ExpressionAttributeValues: { ":e": email },
+        Limit: 1,
+      }),
+    );
+    row = res.Items?.[0];
+  }
+  const admin = isAdmin(event);
+  return {
+    role: admin ? "Admin" : row?.accountRole ?? "Employee",
+    access: admin ? ALL_PAGES : row?.access ?? [],
+    name: row?.name ?? email ?? "",
+  };
 }
