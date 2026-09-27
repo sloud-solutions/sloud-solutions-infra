@@ -60,5 +60,6 @@ export async function callerAccess(event, ddb) {
     access: admin ? ALL_PAGES : row?.access ?? [],
     name: row?.name ?? email ?? "",
     jobTitle: row?.role ?? "",
+    photo: row?.photo ?? "",
   };
 }
