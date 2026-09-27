@@ -221,11 +221,17 @@ module "lambda_employees_list" {
 data "aws_iam_policy_document" "employees_write" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
-    actions   = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
+    actions   = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Scan"]
     resources = [module.employees_table.arn]
   }
   statement {
-    actions   = ["cognito-idp:AdminDisableUser", "cognito-idp:AdminAddUserToGroup", "cognito-idp:AdminRemoveUserFromGroup"]
+    actions = [
+      "cognito-idp:AdminEnableUser",
+      "cognito-idp:AdminDisableUser",
+      "cognito-idp:AdminUserGlobalSignOut",
+      "cognito-idp:AdminAddUserToGroup",
+      "cognito-idp:AdminRemoveUserFromGroup",
+    ]
     resources = [module.user_pool.user_pool_arn]
   }
   statement {

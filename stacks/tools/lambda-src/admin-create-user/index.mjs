@@ -108,6 +108,7 @@ export const handler = async (event) => {
     workDashboard: String(body.workDashboard ?? ""),
     accountRole: body.accountRole,
     access,
+    enabled: true,
   };
   await ddb.send(new PutCommand({ TableName: process.env.EMPLOYEES_TABLE, Item: item }));
 
