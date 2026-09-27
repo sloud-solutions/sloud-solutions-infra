@@ -36,7 +36,8 @@ async function uploadPhoto(employeeId, photoDataUrl) {
 }
 
 const REQUIRED_FIELDS = ["employeeId", "name", "role", "type", "workingMode", "email", "joined", "accountRole", "password"];
-const EMPLOYEE_ID_RE = /^S[A-Z0-9]+$/;
+// Base ids like "S001", plus an optional priority-head suffix like "S001-M".
+const EMPLOYEE_ID_RE = /^S[A-Z0-9]+(-[A-Z]+)?$/;
 
 async function employeeIdTaken(employeeId) {
   const res = await ddb.send(
@@ -68,7 +69,7 @@ export const handler = async (event) => {
   if (!["Admin", "Employee"].includes(body.accountRole)) return json(400, { message: "accountRole must be Admin or Employee." });
 
   const employeeId = String(body.employeeId).toUpperCase();
-  if (!EMPLOYEE_ID_RE.test(employeeId)) return json(400, { message: "Employee ID must start with S, e.g. S1001." });
+  if (!EMPLOYEE_ID_RE.test(employeeId)) return json(400, { message: "Employee ID must start with S, e.g. S1001 or S001-M." });
   if (await employeeIdTaken(employeeId)) return json(409, { message: `Employee ID ${employeeId} is already in use.` });
 
   const access = body.accountRole === "Admin" ? ALL_PAGES : Array.isArray(body.access) ? body.access.filter((p) => ALL_PAGES.includes(p)) : [];

@@ -52,7 +52,8 @@ async function anotherActiveAdminExists(excludeId) {
 }
 
 const EDITABLE_FIELDS = ["name", "role", "type", "skills", "workingMode", "phone", "location", "joined", "workDashboard"];
-const EMPLOYEE_ID_RE = /^S[A-Z0-9]+$/;
+// Base ids like "S001", plus an optional priority-head suffix like "S001-M".
+const EMPLOYEE_ID_RE = /^S[A-Z0-9]+(-[A-Z]+)?$/;
 
 async function employeeIdTaken(employeeId, excludeId) {
   const res = await ddb.send(
@@ -123,7 +124,7 @@ export const handler = async (event) => {
 
     if (body.employeeId !== undefined) {
       const employeeId = String(body.employeeId).toUpperCase();
-      if (!EMPLOYEE_ID_RE.test(employeeId)) return json(400, { message: "Employee ID must start with S, e.g. S1001." });
+      if (!EMPLOYEE_ID_RE.test(employeeId)) return json(400, { message: "Employee ID must start with S, e.g. S1001 or S001-M." });
       if (employeeId !== existing.Item.employeeId && (await employeeIdTaken(employeeId, id))) {
         return json(409, { message: `Employee ID ${employeeId} is already in use.` });
       }
