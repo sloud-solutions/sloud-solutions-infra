@@ -51,7 +51,7 @@ async function anotherActiveAdminExists(excludeId) {
   return (res.Items ?? []).some((row) => row.id !== excludeId && isEnabled(row));
 }
 
-const EDITABLE_FIELDS = ["name", "role", "type", "skills", "workingMode", "phone", "location", "joined", "workDashboard"];
+const EDITABLE_FIELDS = ["employeeId", "name", "role", "type", "skills", "workingMode", "phone", "location", "joined", "workDashboard"];
 
 // Only Admins may edit, enable/disable, or remove a team member (creating one
 // is Admin-only too, via the separate admin-create-user Lambda) -- viewing

@@ -95,6 +95,7 @@ export const handler = async (event) => {
 
   const item = {
     id,
+    employeeId: String(body.employeeId ?? ""),
     name: String(body.name),
     role: String(body.role),
     type: String(body.type),
