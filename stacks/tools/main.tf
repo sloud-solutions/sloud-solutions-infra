@@ -201,6 +201,26 @@ module "lambda_expenses_write" {
   tags                  = var.tags
 }
 
+data "aws_iam_policy_document" "expenses_document_presign" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["s3:PutObject"]
+    resources = ["${module.photos_bucket.arn}/*"]
+  }
+}
+
+module "lambda_expenses_document_presign" {
+  source     = "../../modules/lambda-function"
+  name       = "${local.name}-expenses-document-presign"
+  source_dir = "${path.module}/lambda-src/expenses-document-presign"
+  environment_variables = merge(local.common_env, {
+    PHOTOS_BUCKET = module.photos_bucket.id
+    PHOTOS_DOMAIN = module.photos_cloudfront.domain_name
+  })
+  inline_policy_json = data.aws_iam_policy_document.expenses_document_presign.json
+  tags               = var.tags
+}
+
 data "aws_iam_policy_document" "employees_list" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
@@ -341,6 +361,7 @@ module "http_api" {
     { route_key = "GET /expenses", lambda_invoke_arn = module.lambda_expenses_list.invoke_arn, lambda_function_name = module.lambda_expenses_list.name },
     { route_key = "POST /expenses", lambda_invoke_arn = module.lambda_expenses_write.invoke_arn, lambda_function_name = module.lambda_expenses_write.name },
     { route_key = "DELETE /expenses/{id}", lambda_invoke_arn = module.lambda_expenses_write.invoke_arn, lambda_function_name = module.lambda_expenses_write.name },
+    { route_key = "POST /expenses/document-url", lambda_invoke_arn = module.lambda_expenses_document_presign.invoke_arn, lambda_function_name = module.lambda_expenses_document_presign.name },
     { route_key = "GET /employees", lambda_invoke_arn = module.lambda_employees_list.invoke_arn, lambda_function_name = module.lambda_employees_list.name },
     { route_key = "DELETE /employees/{id}", lambda_invoke_arn = module.lambda_employees_write.invoke_arn, lambda_function_name = module.lambda_employees_write.name },
     { route_key = "PATCH /employees/{id}", lambda_invoke_arn = module.lambda_employees_write.invoke_arn, lambda_function_name = module.lambda_employees_write.name },

@@ -5,7 +5,7 @@ import { json, claims, callerEmail, callerAccess } from "./access.mjs";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
-const REQUIRED_FIELDS = ["date", "item", "vendor", "category", "amount", "paidBy", "status"];
+const REQUIRED_FIELDS = ["date", "item", "vendor", "category", "amount", "paidBy", "status", "expiryDate", "autoRenewal"];
 
 export const handler = async (event) => {
   const { role, access } = await callerAccess(event, ddb);
@@ -24,6 +24,7 @@ export const handler = async (event) => {
     }
     const missing = REQUIRED_FIELDS.filter((f) => body[f] === undefined || body[f] === "");
     if (missing.length) return json(400, { message: `Missing field(s): ${missing.join(", ")}` });
+    if (!["Yes", "No"].includes(body.autoRenewal)) return json(400, { message: "autoRenewal must be Yes or No." });
 
     const item = {
       id: randomUUID(),
@@ -35,6 +36,10 @@ export const handler = async (event) => {
       paidBy: String(body.paidBy),
       status: String(body.status),
       notes: String(body.notes ?? ""),
+      expiryDate: String(body.expiryDate),
+      autoRenewal: body.autoRenewal,
+      documentUrl: String(body.documentUrl ?? ""),
+      documentName: String(body.documentName ?? ""),
       createdBy: callerEmail(event) ?? "unknown",
       createdAt: new Date().toISOString(),
     };
