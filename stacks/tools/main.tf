@@ -28,9 +28,12 @@ locals {
   site_url = local.attach ? "https://${local.domain_name}" : "https://${module.cloudfront.domain_name}"
 
   common_env = {
-    EXPENSES_TABLE        = module.expenses_table.name
-    EMPLOYEES_TABLE       = module.employees_table.name
-    EMPLOYEES_EMAIL_INDEX = "byEmail"
+    EXPENSES_TABLE         = module.expenses_table.name
+    EMPLOYEES_TABLE        = module.employees_table.name
+    EMPLOYEES_EMAIL_INDEX  = "byEmail"
+    WORK_BOARDS_TABLE      = module.work_boards_table.name
+    WORK_TASKS_TABLE       = module.work_tasks_table.name
+    WORK_TASKS_BOARD_INDEX = "byBoard"
   }
 }
 
@@ -158,6 +161,21 @@ module "employees_table" {
 
   extra_attributes         = [{ name = "email", type = "S" }]
   global_secondary_indexes = [{ name = "byEmail", hash_key = "email", projection_type = "ALL" }]
+}
+
+module "work_boards_table" {
+  source     = "../../modules/dynamodb-table"
+  table_name = "${local.name}-work-boards"
+  tags       = var.tags
+}
+
+module "work_tasks_table" {
+  source     = "../../modules/dynamodb-table"
+  table_name = "${local.name}-work-tasks"
+  tags       = var.tags
+
+  extra_attributes         = [{ name = "boardId", type = "S" }]
+  global_secondary_indexes = [{ name = "byBoard", hash_key = "boardId", projection_type = "ALL" }]
 }
 
 # --- Auth ---------------------------------------------------------------
@@ -342,6 +360,90 @@ module "lambda_me" {
   tags                  = var.tags
 }
 
+data "aws_iam_policy_document" "work_boards_list" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:Scan"]
+    resources = [module.work_boards_table.arn]
+  }
+}
+
+module "lambda_work_boards_list" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-work-boards-list"
+  source_dir            = "${path.module}/lambda-src/work-boards-list"
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.work_boards_list.json
+  tags                  = var.tags
+}
+
+data "aws_iam_policy_document" "work_boards_write" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
+    resources = [module.work_boards_table.arn]
+  }
+  statement {
+    actions   = ["dynamodb:Query"]
+    resources = ["${module.work_tasks_table.arn}/index/*"]
+  }
+  statement {
+    actions   = ["dynamodb:BatchWriteItem"]
+    resources = [module.work_tasks_table.arn]
+  }
+}
+
+module "lambda_work_boards_write" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-work-boards-write"
+  source_dir            = "${path.module}/lambda-src/work-boards-write"
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.work_boards_write.json
+  tags                  = var.tags
+}
+
+data "aws_iam_policy_document" "work_tasks_list" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:GetItem"]
+    resources = [module.work_boards_table.arn]
+  }
+  statement {
+    actions   = ["dynamodb:Query"]
+    resources = ["${module.work_tasks_table.arn}/index/*"]
+  }
+}
+
+module "lambda_work_tasks_list" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-work-tasks-list"
+  source_dir            = "${path.module}/lambda-src/work-tasks-list"
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.work_tasks_list.json
+  tags                  = var.tags
+}
+
+data "aws_iam_policy_document" "work_tasks_write" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:GetItem"]
+    resources = [module.work_boards_table.arn]
+  }
+  statement {
+    actions   = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
+    resources = [module.work_tasks_table.arn]
+  }
+}
+
+module "lambda_work_tasks_write" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-work-tasks-write"
+  source_dir            = "${path.module}/lambda-src/work-tasks-write"
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.work_tasks_write.json
+  tags                  = var.tags
+}
+
 data "aws_iam_policy_document" "seed" {
   statement {
     actions   = ["dynamodb:PutItem"]
@@ -383,5 +485,13 @@ module "http_api" {
     { route_key = "POST /admin/users", lambda_invoke_arn = module.lambda_admin_create_user.invoke_arn, lambda_function_name = module.lambda_admin_create_user.name },
     { route_key = "POST /admin/reset-password", lambda_invoke_arn = module.lambda_admin_reset_password.invoke_arn, lambda_function_name = module.lambda_admin_reset_password.name },
     { route_key = "GET /me", lambda_invoke_arn = module.lambda_me.invoke_arn, lambda_function_name = module.lambda_me.name },
+    { route_key = "GET /work-boards", lambda_invoke_arn = module.lambda_work_boards_list.invoke_arn, lambda_function_name = module.lambda_work_boards_list.name },
+    { route_key = "POST /work-boards", lambda_invoke_arn = module.lambda_work_boards_write.invoke_arn, lambda_function_name = module.lambda_work_boards_write.name },
+    { route_key = "PATCH /work-boards/{id}", lambda_invoke_arn = module.lambda_work_boards_write.invoke_arn, lambda_function_name = module.lambda_work_boards_write.name },
+    { route_key = "DELETE /work-boards/{id}", lambda_invoke_arn = module.lambda_work_boards_write.invoke_arn, lambda_function_name = module.lambda_work_boards_write.name },
+    { route_key = "GET /work-boards/{boardId}/tasks", lambda_invoke_arn = module.lambda_work_tasks_list.invoke_arn, lambda_function_name = module.lambda_work_tasks_list.name },
+    { route_key = "POST /work-boards/{boardId}/tasks", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
+    { route_key = "PATCH /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
+    { route_key = "DELETE /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
   ]
 }
