@@ -221,22 +221,30 @@ module "lambda_employees_list" {
 data "aws_iam_policy_document" "employees_write" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
-    actions   = ["dynamodb:GetItem", "dynamodb:DeleteItem"]
+    actions   = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
     resources = [module.employees_table.arn]
   }
   statement {
-    actions   = ["cognito-idp:AdminDisableUser"]
+    actions   = ["cognito-idp:AdminDisableUser", "cognito-idp:AdminAddUserToGroup", "cognito-idp:AdminRemoveUserFromGroup"]
     resources = [module.user_pool.user_pool_arn]
+  }
+  statement {
+    actions   = ["s3:PutObject"]
+    resources = ["${module.photos_bucket.arn}/*"]
   }
 }
 
 module "lambda_employees_write" {
-  source                = "../../modules/lambda-function"
-  name                  = "${local.name}-employees-write"
-  source_dir            = "${path.module}/lambda-src/employees-write"
-  environment_variables = merge(local.common_env, { USER_POOL_ID = module.user_pool.user_pool_id })
-  inline_policy_json    = data.aws_iam_policy_document.employees_write.json
-  tags                  = var.tags
+  source     = "../../modules/lambda-function"
+  name       = "${local.name}-employees-write"
+  source_dir = "${path.module}/lambda-src/employees-write"
+  environment_variables = merge(local.common_env, {
+    USER_POOL_ID  = module.user_pool.user_pool_id
+    PHOTOS_BUCKET = module.photos_bucket.id
+    PHOTOS_DOMAIN = module.photos_cloudfront.domain_name
+  })
+  inline_policy_json = data.aws_iam_policy_document.employees_write.json
+  tags               = var.tags
 }
 
 data "aws_iam_policy_document" "admin_create_user" {
@@ -329,6 +337,7 @@ module "http_api" {
     { route_key = "DELETE /expenses/{id}", lambda_invoke_arn = module.lambda_expenses_write.invoke_arn, lambda_function_name = module.lambda_expenses_write.name },
     { route_key = "GET /employees", lambda_invoke_arn = module.lambda_employees_list.invoke_arn, lambda_function_name = module.lambda_employees_list.name },
     { route_key = "DELETE /employees/{id}", lambda_invoke_arn = module.lambda_employees_write.invoke_arn, lambda_function_name = module.lambda_employees_write.name },
+    { route_key = "PATCH /employees/{id}", lambda_invoke_arn = module.lambda_employees_write.invoke_arn, lambda_function_name = module.lambda_employees_write.name },
     { route_key = "POST /admin/users", lambda_invoke_arn = module.lambda_admin_create_user.invoke_arn, lambda_function_name = module.lambda_admin_create_user.name },
     { route_key = "POST /admin/reset-password", lambda_invoke_arn = module.lambda_admin_reset_password.invoke_arn, lambda_function_name = module.lambda_admin_reset_password.name },
     { route_key = "GET /me", lambda_invoke_arn = module.lambda_me.invoke_arn, lambda_function_name = module.lambda_me.name },
