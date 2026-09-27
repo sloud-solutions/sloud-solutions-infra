@@ -5,7 +5,7 @@ import { json, callerAccess, callerEmail } from "./access.mjs";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const STATUSES = ["todo", "in-progress", "completed", "blocked"];
-const EDITABLE_FIELDS = ["title", "description", "status", "assignee", "priority", "dueDate"];
+const EDITABLE_FIELDS = ["title", "description", "notes", "status", "assignee", "priority", "dueDate"];
 
 /** Loads a board and checks membership: null = no such board, undefined = not a member, else the board. */
 async function loadBoardForMember(boardId, role, email) {
@@ -44,6 +44,7 @@ export const handler = async (event) => {
       boardId,
       title: String(body.title).trim(),
       description: String(body.description ?? "").trim(),
+      notes: String(body.notes ?? "").trim(),
       status,
       assignee: String(body.assignee ?? ""),
       priority: String(body.priority ?? ""),

@@ -15,8 +15,7 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const canManage = (board, role, email) => role === "Admin" || board.owner === email;
 
-/** Deletes every task on a board before the board itself goes, so nothing orphans. */
-async function deleteBoardTasks(boardId) {
+async function tasksForBoard(boardId) {
   const res = await ddb.send(
     new QueryCommand({
       TableName: process.env.WORK_TASKS_TABLE,
@@ -25,12 +24,35 @@ async function deleteBoardTasks(boardId) {
       ExpressionAttributeValues: { ":b": boardId },
     }),
   );
-  const items = res.Items ?? [];
+  return res.Items ?? [];
+}
+
+/** Deletes every task on a board before the board itself goes, so nothing orphans. */
+async function deleteBoardTasks(boardId) {
+  const items = await tasksForBoard(boardId);
   for (let i = 0; i < items.length; i += 25) {
     const batch = items.slice(i, i + 25);
     await ddb.send(
       new BatchWriteCommand({
         RequestItems: { [process.env.WORK_TASKS_TABLE]: batch.map((t) => ({ DeleteRequest: { Key: { id: t.id } } })) },
+      }),
+    );
+  }
+}
+
+/** Someone dropped from a board's membership loses any tasks assigned to them -- back to Unassigned. */
+async function unassignRemovedMembers(boardId, removedEmails) {
+  if (!removedEmails.length) return;
+  const items = await tasksForBoard(boardId);
+  const now = new Date().toISOString();
+  for (const t of items.filter((t) => removedEmails.includes(t.assignee))) {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: process.env.WORK_TASKS_TABLE,
+        Key: { id: t.id },
+        UpdateExpression: "SET #assignee = :empty, #updatedAt = :now",
+        ExpressionAttributeNames: { "#assignee": "assignee", "#updatedAt": "updatedAt" },
+        ExpressionAttributeValues: { ":empty": "", ":now": now },
       }),
     );
   }
@@ -101,9 +123,13 @@ export const handler = async (event) => {
       values[":team"] = String(body.team).trim();
       sets.push("#team = :team");
     }
+    let removedMembers = [];
     if (body.members !== undefined) {
+      const newMembers = Array.isArray(body.members) ? body.members.map(String) : [];
+      const oldMembers = existing.Item.members ?? [];
+      removedMembers = oldMembers.filter((m) => !newMembers.includes(m));
       names["#members"] = "members";
-      values[":members"] = Array.isArray(body.members) ? body.members.map(String) : [];
+      values[":members"] = newMembers;
       sets.push("#members = :members");
     }
     if (!sets.length) return json(400, { message: "Nothing to update." });
@@ -118,6 +144,7 @@ export const handler = async (event) => {
         ReturnValues: "ALL_NEW",
       }),
     );
+    await unassignRemovedMembers(id, removedMembers);
     return json(200, res.Attributes);
   }
 

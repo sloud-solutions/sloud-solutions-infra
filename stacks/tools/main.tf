@@ -388,7 +388,7 @@ data "aws_iam_policy_document" "work_boards_write" {
     resources = ["${module.work_tasks_table.arn}/index/*"]
   }
   statement {
-    actions   = ["dynamodb:BatchWriteItem"]
+    actions   = ["dynamodb:BatchWriteItem", "dynamodb:UpdateItem"]
     resources = [module.work_tasks_table.arn]
   }
 }
