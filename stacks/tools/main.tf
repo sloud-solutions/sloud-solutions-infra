@@ -495,3 +495,24 @@ module "http_api" {
     { route_key = "DELETE /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
   ]
 }
+
+# --- Billing -----------------------------------------------------------
+# Account-wide (not scoped to this stack's resources specifically) -- AWS
+# Budgets has no resource-level ARNs to filter by, and total account spend
+# is what actually matters for a "did something run away" alert.
+
+resource "aws_budgets_budget" "daily_cost_alert" {
+  name         = "${var.project}-daily-cost-alert"
+  budget_type  = "COST"
+  limit_amount = "1"
+  limit_unit   = "USD"
+  time_unit    = "DAILY"
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = ["info@sloudsolutions.com"]
+  }
+}

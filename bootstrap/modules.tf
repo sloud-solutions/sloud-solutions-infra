@@ -83,6 +83,14 @@ data "aws_iam_policy_document" "apply" {
     actions   = ["iam:PassRole"]
     resources = ["arn:aws:iam::${local.account_id}:role/${var.project}-*"]
   }
+
+  # AWS Budgets has no resource-level ARNs to scope to -- account-wide by
+  # design, consistent with a budget alert covering total account spend.
+  statement {
+    sid       = "ManageBudgets"
+    actions   = ["budgets:*"]
+    resources = ["*"]
+  }
 }
 
 module "apply_role" {
