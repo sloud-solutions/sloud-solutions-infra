@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Merged config (common + environment)",
   "type": "object",
-  "required": ["project", "environment", "aws", "backend", "github", "website", "tags"],
+  "required": ["project", "environment", "aws", "backend", "github", "website", "tools", "tags"],
   "additionalProperties": false,
   "properties": {
     "project": { "type": "string", "pattern": "^[a-z0-9-]{3,30}$" },
@@ -27,7 +27,7 @@
     },
     "github": {
       "type": "object",
-      "required": ["org", "org_id", "infra_repo", "infra_repo_id", "site_repo", "site_repo_id", "deploy_branch", "apply_environments"],
+      "required": ["org", "org_id", "infra_repo", "infra_repo_id", "site_repo", "site_repo_id", "tools_repo", "tools_repo_id", "deploy_branch", "tools_deploy_branch", "apply_environments"],
       "additionalProperties": false,
       "properties": {
         "org": { "type": "string" },
@@ -36,7 +36,10 @@
         "infra_repo_id": { "type": "string", "pattern": "^[0-9]+$" },
         "site_repo": { "type": "string" },
         "site_repo_id": { "type": "string", "pattern": "^[0-9]+$" },
-        "deploy_branch": { "type": "string" },
+        "tools_repo": { "type": "string" },
+        "tools_repo_id": { "type": "string", "pattern": "^[0-9]+$" },
+        "deploy_branch": { "type": "string", "description": "Branch site_repo deploys from." },
+        "tools_deploy_branch": { "type": "string", "description": "Branch tools_repo deploys from." },
         "apply_environments": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
       }
     },
@@ -54,6 +57,34 @@
         "include_www": { "type": "boolean" },
         "price_class": { "enum": ["PriceClass_100", "PriceClass_200", "PriceClass_All"] },
         "default_root_object": { "type": "string" }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "required": ["domain_name", "dns_provider", "attach_domain", "include_www", "price_class", "default_root_object"],
+      "additionalProperties": false,
+      "properties": {
+        "domain_name": {
+          "type": ["string", "null"],
+          "pattern": "^([a-z0-9-]+\\.)+[a-z]{2,}$"
+        },
+        "dns_provider": { "enum": ["external", "route53"] },
+        "attach_domain": { "type": "boolean" },
+        "include_www": { "type": "boolean" },
+        "price_class": { "enum": ["PriceClass_100", "PriceClass_200", "PriceClass_All"] },
+        "default_root_object": { "type": "string" }
+      }
+    },
+    "backends": {
+      "type": "object",
+      "description": "Per-stack backend-key overrides, merged onto `backend`. Only needed for stacks other than the default (website).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["key"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "minLength": 1 }
+        }
       }
     },
     "tags": { "type": "object", "additionalProperties": { "type": "string" } }

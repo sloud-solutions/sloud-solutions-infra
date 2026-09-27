@@ -10,6 +10,11 @@ on:
       - "scripts/**"
   workflow_dispatch:
     inputs:
+      stack:
+        description: Stack to apply
+        type: choice
+        options: [website, tools]
+        default: website
       environment:
         description: Environment to apply
         type: choice
@@ -21,12 +26,29 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-apply-${{ inputs.environment || 'prod' }}
+  group: terraform-apply-${{ inputs.stack || 'push' }}-${{ inputs.environment || 'prod' }}
   cancel-in-progress: false
 
 jobs:
-  apply:
+  # Push to main: apply every stack (path filters above already scope this to
+  # infra changes; simplest to keep both stacks in lockstep on merge).
+  apply_on_push:
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [website, tools]
     uses: ./.github/workflows/_terraform.yml
     with:
-      environment: ${{ inputs.environment || 'prod' }}
+      stack: ${{ matrix.stack }}
+      environment: prod
+      action: apply
+
+  # Manual dispatch: apply just the chosen stack.
+  apply_on_dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_terraform.yml
+    with:
+      stack: ${{ inputs.stack }}
+      environment: ${{ inputs.environment }}
       action: apply

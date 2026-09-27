@@ -65,6 +65,24 @@ data "aws_iam_policy_document" "apply" {
     actions   = ["iam:Get*", "iam:List*"]
     resources = ["*"]
   }
+
+  # Added for the sloud-solutions-tools backend (Lambda + DynamoDB + Cognito +
+  # API Gateway). Broad service-level actions on "*", matching the existing
+  # ManageSiteServices statement's style, rather than enumerating every ARN.
+  statement {
+    sid       = "ManageToolsServices"
+    actions   = ["lambda:*", "dynamodb:*", "cognito-idp:*", "apigateway:*", "logs:*"]
+    resources = ["*"]
+  }
+
+  # Lets Terraform attach the Lambda execution roles it creates (under
+  # role/${var.project}-*, already covered by ManageProjectRoles above) to the
+  # Lambda functions it also creates.
+  statement {
+    sid       = "PassLambdaExecRoles"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${local.account_id}:role/${var.project}-*"]
+  }
 }
 
 module "apply_role" {
