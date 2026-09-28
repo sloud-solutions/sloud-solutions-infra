@@ -61,3 +61,22 @@ output "ses_domain_verification_record_to_add" {
     value = aws_ses_domain_identity.notify.verification_token
   }
 }
+
+# Consumed cross-stack by stacks/tools (via terraform_remote_state) for the
+# HRMS Resumes admin view -- lets tools' Lambdas read/manage applications and
+# resumes without duplicating those resources.
+output "applications_table_arn" {
+  value = module.applications_table.arn
+}
+
+output "applications_table_name" {
+  value = module.applications_table.name
+}
+
+output "resumes_bucket_arn" {
+  value = module.resumes_bucket.arn
+}
+
+output "resumes_bucket_name" {
+  value = module.resumes_bucket.id
+}
