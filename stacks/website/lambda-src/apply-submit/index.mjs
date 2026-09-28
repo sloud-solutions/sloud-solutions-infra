@@ -78,7 +78,7 @@ export const handler = async (event) => {
     const segmentColor = SEGMENT_COLORS[segment] ?? "#2563EB";
 
     const textLines = [
-      `New application: ${jobTitle} (${segment})`,
+      `New application from website: ${jobTitle} (${segment})`,
       "",
       `Name: ${name}`,
       `Email: ${email}`,
@@ -141,7 +141,7 @@ export const handler = async (event) => {
         Destination: { ToAddresses: [process.env.NOTIFY_EMAIL] },
         ReplyToAddresses: [email],
         Message: {
-          Subject: { Data: `New application: ${jobTitle} (${segment})` },
+          Subject: { Data: `New application from website: ${jobTitle} (${segment})` },
           Body: { Text: { Data: textLines.join("\n") }, Html: { Data: html } },
         },
       }),
