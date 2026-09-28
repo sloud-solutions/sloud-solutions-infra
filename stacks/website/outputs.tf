@@ -42,6 +42,13 @@ output "apply_api_endpoint" {
   value       = aws_apigatewayv2_api.apply.api_endpoint
 }
 
-output "ses_verification_reminder" {
-  value = "AWS emailed a verification link to ${local.notify_email} -- click it before the apply-submit notification email will send."
+output "ses_dkim_records_to_add" {
+  description = "Add these 3 CNAME records (DNS only) at your DNS provider so outbound application-notification mail is DKIM-signed and doesn't land in spam."
+  value = [
+    for token in aws_ses_domain_dkim.notify.dkim_tokens : {
+      name  = "${token}._domainkey.${local.domain_name}"
+      type  = "CNAME"
+      value = "${token}.dkim.amazonses.com"
+    }
+  ]
 }

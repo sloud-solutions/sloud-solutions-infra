@@ -140,13 +140,20 @@ module "applications_table" {
   tags       = var.tags
 }
 
-# One-time manual step: AWS emails a verification link to this address that a
-# human must click before SES can send from/to it (cannot be automated by
-# Terraform). Sender and recipient are the same verified address here, so
-# this works entirely inside the SES sandbox -- no production-access request
-# needed.
-resource "aws_ses_email_identity" "notify" {
-  email = local.notify_email
+# Domain identity + DKIM (instead of a single verified email address) so
+# outbound mail is cryptographically signed as genuinely from this domain --
+# without it, mail clients have no way to tell it apart from spoofed mail and
+# tend to file it as spam. One-time manual step: add the 3 CNAME records in
+# `ses_dkim_records_to_add` (output below) at your DNS provider; cannot be
+# automated here since DNS is external, not Route 53. Sender and recipient
+# are the same verified domain here, so this still works entirely inside the
+# SES sandbox -- no production-access request needed.
+resource "aws_ses_domain_identity" "notify" {
+  domain = local.domain_name
+}
+
+resource "aws_ses_domain_dkim" "notify" {
+  domain = aws_ses_domain_identity.notify.domain
 }
 
 data "aws_iam_policy_document" "apply_presign" {
@@ -178,7 +185,7 @@ data "aws_iam_policy_document" "apply_submit" {
   }
   statement {
     actions   = ["ses:SendEmail", "ses:SendRawEmail"]
-    resources = [aws_ses_email_identity.notify.arn]
+    resources = [aws_ses_domain_identity.notify.arn]
   }
 }
 
