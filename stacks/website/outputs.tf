@@ -36,3 +36,12 @@ output "dns_records_to_add" {
     target = module.cloudfront.domain_name
   } : null
 }
+
+output "apply_api_endpoint" {
+  description = "Set as PUBLIC_APPLY_API_BASE_URL in the website repo."
+  value       = aws_apigatewayv2_api.apply.api_endpoint
+}
+
+output "ses_verification_reminder" {
+  value = "AWS emailed a verification link to ${local.notify_email} -- click it before the apply-submit notification email will send."
+}
