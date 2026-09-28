@@ -381,6 +381,116 @@ module "lambda_cloud_resources_list" {
   tags                  = var.tags
 }
 
+# --- Cost summary widget ----------------------------------------------------
+# Cost Explorer is billed per API request ($0.01/call), unlike everything
+# else in this stack -- so it must NOT be called from the page-view path.
+# cost_poller runs on its own EventBridge schedule regardless of traffic;
+# cost_summary (what the page actually calls) only ever reads the cache item
+# that cost_poller wrote, so viewing the dashboard is always $0 no matter how
+# often it's opened. See the "Cost analysis" section of the runbook for why.
+
+module "cost_cache_table" {
+  source     = "../../modules/dynamodb-table"
+  table_name = "${local.name}-cost-cache"
+  tags       = var.tags
+}
+
+data "aws_iam_policy_document" "cost_poller" {
+  statement {
+    actions   = ["ce:GetCostAndUsage"]
+    resources = ["*"]
+  }
+  statement {
+    # The Budgets IAM action name doesn't match the API call name -- the
+    # DescribeBudgets API requires the "ViewBudget" action.
+    actions   = ["budgets:ViewBudget"]
+    resources = ["*"]
+  }
+  statement {
+    actions   = ["sts:GetCallerIdentity"]
+    resources = ["*"]
+  }
+  statement {
+    actions   = ["dynamodb:PutItem"]
+    resources = [module.cost_cache_table.arn]
+  }
+}
+
+module "lambda_cost_poller" {
+  source     = "../../modules/lambda-function"
+  name       = "${local.name}-cost-poller"
+  source_dir = "${path.module}/lambda-src/cost-poller"
+  timeout    = 30
+  environment_variables = {
+    COST_CACHE_TABLE = module.cost_cache_table.name
+  }
+  inline_policy_json = data.aws_iam_policy_document.cost_poller.json
+  tags               = var.tags
+}
+
+# Every 6 hours -- AWS's own billing data doesn't update more often than
+# that anyway, so this cadence loses no real freshness. At $0.01/call, this
+# is ~$1.20/month regardless of how many Admins view the dashboard.
+resource "aws_scheduler_schedule" "cost_poller" {
+  name                = "${local.name}-cost-poller"
+  schedule_expression = "rate(6 hours)"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = module.lambda_cost_poller.arn
+    role_arn = aws_iam_role.cost_poller_scheduler.arn
+  }
+}
+
+data "aws_iam_policy_document" "scheduler_trust" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "cost_poller_scheduler" {
+  name               = "${local.name}-cost-poller-scheduler"
+  assume_role_policy = data.aws_iam_policy_document.scheduler_trust.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy" "cost_poller_scheduler_invoke" {
+  name = "${local.name}-cost-poller-scheduler-invoke"
+  role = aws_iam_role.cost_poller_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = module.lambda_cost_poller.arn
+    }]
+  })
+}
+
+data "aws_iam_policy_document" "cost_summary" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:GetItem"]
+    resources = [module.cost_cache_table.arn]
+  }
+}
+
+module "lambda_cost_summary" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-cost-summary"
+  source_dir            = "${path.module}/lambda-src/cost-summary"
+  environment_variables = merge(local.common_env, { COST_CACHE_TABLE = module.cost_cache_table.name })
+  inline_policy_json    = data.aws_iam_policy_document.cost_summary.json
+  tags                  = var.tags
+}
+
 data "aws_iam_policy_document" "work_boards_list" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
@@ -542,6 +652,29 @@ resource "aws_lambda_permission" "cloud_resources_list" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = module.lambda_cloud_resources_list.name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.http_api.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_integration" "cost_summary" {
+  api_id                 = module.http_api.api_id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = module.lambda_cost_summary.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "cost_summary" {
+  api_id             = module.http_api.api_id
+  route_key          = "GET /cost-summary"
+  target             = "integrations/${aws_apigatewayv2_integration.cost_summary.id}"
+  authorization_type = "JWT"
+  authorizer_id      = module.http_api.authorizer_id
+}
+
+resource "aws_lambda_permission" "cost_summary" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_cost_summary.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${module.http_api.execution_arn}/*/*"
 }
