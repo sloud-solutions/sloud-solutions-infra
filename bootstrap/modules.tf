@@ -91,6 +91,23 @@ data "aws_iam_policy_document" "apply" {
     actions   = ["budgets:*"]
     resources = ["*"]
   }
+
+  # EventBridge Scheduler (the cost-poller schedule) and SES (the website's
+  # domain identity/DKIM + notification sending) -- added late, after their
+  # respective stacks already existed, so CI's applies for both have been
+  # silently failing on refresh/plan (AccessDenied) ever since. Local applies
+  # worked around it using a broader personal AWS profile.
+  statement {
+    sid       = "ManageScheduler"
+    actions   = ["scheduler:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "ManageSES"
+    actions   = ["ses:*"]
+    resources = ["*"]
+  }
 }
 
 module "apply_role" {
