@@ -52,3 +52,12 @@ output "ses_dkim_records_to_add" {
     }
   ]
 }
+
+output "ses_domain_verification_record_to_add" {
+  description = "Add this TXT record (DNS only) too -- proves domain ownership to SES, separate from the DKIM CNAMEs above."
+  value = {
+    name  = "_amazonses.${local.domain_name}"
+    type  = "TXT"
+    value = aws_ses_domain_identity.notify.verification_token
+  }
+}
