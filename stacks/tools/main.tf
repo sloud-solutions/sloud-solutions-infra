@@ -4,6 +4,18 @@ data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
 
+# Cross-stack read of the website stack's applications table / resumes
+# bucket, for the HRMS Resumes admin view below -- both stacks share one S3
+# state backend/account, so this needs no cross-account role assumption.
+data "terraform_remote_state" "website" {
+  backend = "s3"
+  config = {
+    bucket = "sloud-solutions-tfstate-639793187640"
+    key    = "website/prod.tfstate"
+    region = "us-east-1"
+  }
+}
+
 locals {
   # Keeps the required `sloud-website-*` IAM-role-naming prefix that
   # bootstrap's ManageProjectRoles statement is scoped to (var.project is
@@ -381,6 +393,78 @@ module "lambda_cloud_resources_list" {
   tags                  = var.tags
 }
 
+# --- HRMS: Resumes -----------------------------------------------------
+# Admin-only view over job applications submitted through the website's
+# public careers "Apply" form -- the applications table and resumes bucket
+# live in the website stack (see data.terraform_remote_state.website above),
+# not here.
+
+locals {
+  resumes_env = {
+    APPLICATIONS_TABLE = data.terraform_remote_state.website.outputs.applications_table_name
+    RESUMES_BUCKET     = data.terraform_remote_state.website.outputs.resumes_bucket_name
+  }
+}
+
+data "aws_iam_policy_document" "resumes_list" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:Scan"]
+    resources = [data.terraform_remote_state.website.outputs.applications_table_arn]
+  }
+}
+
+module "lambda_resumes_list" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-resumes-list"
+  source_dir            = "${path.module}/lambda-src/resumes-list"
+  environment_variables = merge(local.common_env, local.resumes_env)
+  inline_policy_json    = data.aws_iam_policy_document.resumes_list.json
+  tags                  = var.tags
+}
+
+data "aws_iam_policy_document" "resumes_resume_url" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:GetItem"]
+    resources = [data.terraform_remote_state.website.outputs.applications_table_arn]
+  }
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${data.terraform_remote_state.website.outputs.resumes_bucket_arn}/*"]
+  }
+}
+
+module "lambda_resumes_resume_url" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-resumes-resume-url"
+  source_dir            = "${path.module}/lambda-src/resumes-resume-url"
+  environment_variables = merge(local.common_env, local.resumes_env)
+  inline_policy_json    = data.aws_iam_policy_document.resumes_resume_url.json
+  tags                  = var.tags
+}
+
+data "aws_iam_policy_document" "resumes_write" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
+    resources = [data.terraform_remote_state.website.outputs.applications_table_arn]
+  }
+  statement {
+    actions   = ["s3:DeleteObject"]
+    resources = ["${data.terraform_remote_state.website.outputs.resumes_bucket_arn}/*"]
+  }
+}
+
+module "lambda_resumes_write" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-resumes-write"
+  source_dir            = "${path.module}/lambda-src/resumes-write"
+  environment_variables = merge(local.common_env, local.resumes_env)
+  inline_policy_json    = data.aws_iam_policy_document.resumes_write.json
+  tags                  = var.tags
+}
+
 # --- Cost summary widget ----------------------------------------------------
 # Cost Explorer is billed per API request ($0.01/call), unlike everything
 # else in this stack -- so it must NOT be called from the page-view path.
@@ -624,6 +708,10 @@ module "http_api" {
     { route_key = "POST /work-boards/{boardId}/tasks", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
     { route_key = "PATCH /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
     { route_key = "DELETE /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
+    { route_key = "GET /resumes", lambda_invoke_arn = module.lambda_resumes_list.invoke_arn, lambda_function_name = module.lambda_resumes_list.name },
+    { route_key = "GET /resumes/{id}/resume-url", lambda_invoke_arn = module.lambda_resumes_resume_url.invoke_arn, lambda_function_name = module.lambda_resumes_resume_url.name },
+    { route_key = "PATCH /resumes/{id}", lambda_invoke_arn = module.lambda_resumes_write.invoke_arn, lambda_function_name = module.lambda_resumes_write.name },
+    { route_key = "DELETE /resumes/{id}", lambda_invoke_arn = module.lambda_resumes_write.invoke_arn, lambda_function_name = module.lambda_resumes_write.name },
   ]
 }
 
