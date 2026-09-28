@@ -197,8 +197,35 @@ module "lambda_apply_submit" {
     RESUMES_BUCKET     = module.resumes_bucket.id
     APPLICATIONS_TABLE = module.applications_table.name
     NOTIFY_EMAIL       = local.notify_email
+    APPLY_API_BASE     = aws_apigatewayv2_api.apply.api_endpoint
   }
   inline_policy_json = data.aws_iam_policy_document.apply_submit.json
+  tags               = var.tags
+}
+
+# Resolves the short /apply/resume/<id> link in the HR notification email to
+# a fresh presigned S3 URL on every click -- keeps the email link short and
+# stable instead of embedding a ~1,700-character presigned URL directly.
+data "aws_iam_policy_document" "apply_resume_link" {
+  statement {
+    actions   = ["dynamodb:GetItem"]
+    resources = [module.applications_table.arn]
+  }
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${module.resumes_bucket.arn}/*"]
+  }
+}
+
+module "lambda_apply_resume_link" {
+  source     = "../../modules/lambda-function"
+  name       = "${local.name}-apply-resume-link"
+  source_dir = "${path.module}/lambda-src/apply-resume-link"
+  environment_variables = {
+    RESUMES_BUCKET     = module.resumes_bucket.id
+    APPLICATIONS_TABLE = module.applications_table.name
+  }
+  inline_policy_json = data.aws_iam_policy_document.apply_resume_link.json
   tags               = var.tags
 }
 
@@ -263,6 +290,28 @@ resource "aws_lambda_permission" "apply_submit" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = module.lambda_apply_submit.name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.apply.execution_arn}/*/*"
+}
+
+resource "aws_apigatewayv2_integration" "apply_resume_link" {
+  api_id                 = aws_apigatewayv2_api.apply.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = module.lambda_apply_resume_link.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "apply_resume_link" {
+  api_id             = aws_apigatewayv2_api.apply.id
+  route_key          = "GET /apply/resume/{id}"
+  target             = "integrations/${aws_apigatewayv2_integration.apply_resume_link.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_lambda_permission" "apply_resume_link" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_apply_resume_link.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.apply.execution_arn}/*/*"
 }
