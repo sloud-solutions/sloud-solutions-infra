@@ -360,6 +360,27 @@ module "lambda_me" {
   tags                  = var.tags
 }
 
+# Admin-only: powers the "Cloud Resource Tracker" page, listing every resource
+# across the account via Resource Explorer's pre-built index (read-only,
+# account-wide -- deliberately not scoped to a single service/resource ARN).
+data "aws_iam_policy_document" "cloud_resources_list" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["resource-explorer-2:Search", "resource-explorer-2:GetIndex"]
+    resources = ["*"]
+  }
+}
+
+module "lambda_cloud_resources_list" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-cloud-resources-list"
+  source_dir            = "${path.module}/lambda-src/cloud-resources-list"
+  timeout               = 30
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.cloud_resources_list.json
+  tags                  = var.tags
+}
+
 data "aws_iam_policy_document" "work_boards_list" {
   source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
   statement {
@@ -494,6 +515,35 @@ module "http_api" {
     { route_key = "PATCH /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
     { route_key = "DELETE /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
   ]
+}
+
+# Kept as standalone resources (not in the `routes` list above) so that
+# adding/changing this one route doesn't pull every other routed Lambda's
+# `invoke_arn` into the same for_each dependency graph -- the http_api
+# module's `functions_by_name` local is built from the *entire* routes list,
+# so any edit to it forces Terraform to re-evaluate (and offer to "fix" drift
+# on) every Lambda referenced there, not just the one actually changing.
+resource "aws_apigatewayv2_integration" "cloud_resources_list" {
+  api_id                 = module.http_api.api_id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = module.lambda_cloud_resources_list.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "cloud_resources_list" {
+  api_id             = module.http_api.api_id
+  route_key          = "GET /cloud-resources"
+  target             = "integrations/${aws_apigatewayv2_integration.cloud_resources_list.id}"
+  authorization_type = "JWT"
+  authorizer_id      = module.http_api.authorizer_id
+}
+
+resource "aws_lambda_permission" "cloud_resources_list" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_cloud_resources_list.name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${module.http_api.execution_arn}/*/*"
 }
 
 # --- Billing -----------------------------------------------------------

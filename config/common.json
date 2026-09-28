@@ -31,9 +31,9 @@
     "default_root_object": "index.html"
   },
   "tools": {
-    "domain_name": null,
+    "domain_name": "hub.sloudsolutions.com",
     "dns_provider": "external",
-    "attach_domain": false,
+    "attach_domain": true,
     "include_www": false,
     "price_class": "PriceClass_100",
     "default_root_object": "index.html"
