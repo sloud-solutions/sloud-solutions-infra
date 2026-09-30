@@ -13,7 +13,7 @@ import { json, callerAccess, callerEmail } from "./access.mjs";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
-const canManage = (board, role, email) => role === "Admin" || board.owner === email;
+const canManage = (board, role) => role === "Admin";
 
 async function tasksForBoard(boardId) {
   const res = await ddb.send(
@@ -67,6 +67,9 @@ export const handler = async (event) => {
   const method = event.requestContext.http.method;
 
   if (method === "POST") {
+    if (role !== "Admin") {
+      return json(403, { message: "Only an Admin can create a board." });
+    }
     let body;
     try {
       body = JSON.parse(event.body || "{}");
@@ -92,8 +95,8 @@ export const handler = async (event) => {
   if (!id) return json(400, { message: "Missing id." });
   const existing = await ddb.send(new GetCommand({ TableName: process.env.WORK_BOARDS_TABLE, Key: { id } }));
   if (!existing.Item) return json(404, { message: "No such board." });
-  if (!canManage(existing.Item, role, email)) {
-    return json(403, { message: "Only the board owner or an Admin can change this board." });
+  if (!canManage(existing.Item, role)) {
+    return json(403, { message: "Only an Admin can change this board." });
   }
 
   if (method === "PATCH") {
