@@ -40,12 +40,14 @@ locals {
   site_url = local.attach ? "https://${local.domain_name}" : "https://${module.cloudfront.domain_name}"
 
   common_env = {
-    EXPENSES_TABLE         = module.expenses_table.name
-    EMPLOYEES_TABLE        = module.employees_table.name
-    EMPLOYEES_EMAIL_INDEX  = "byEmail"
-    WORK_BOARDS_TABLE      = module.work_boards_table.name
-    WORK_TASKS_TABLE       = module.work_tasks_table.name
-    WORK_TASKS_BOARD_INDEX = "byBoard"
+    EXPENSES_TABLE            = module.expenses_table.name
+    EMPLOYEES_TABLE           = module.employees_table.name
+    EMPLOYEES_EMAIL_INDEX     = "byEmail"
+    WORK_BOARDS_TABLE         = module.work_boards_table.name
+    WORK_TASKS_TABLE          = module.work_tasks_table.name
+    WORK_TASKS_BOARD_INDEX    = "byBoard"
+    ATTENDANCE_TABLE          = module.attendance_table.name
+    ATTENDANCE_EMPLOYEE_INDEX = "byEmployeeId"
   }
 }
 
@@ -188,6 +190,15 @@ module "work_tasks_table" {
 
   extra_attributes         = [{ name = "boardId", type = "S" }]
   global_secondary_indexes = [{ name = "byBoard", hash_key = "boardId", projection_type = "ALL" }]
+}
+
+module "attendance_table" {
+  source     = "../../modules/dynamodb-table"
+  table_name = "${local.name}-attendance"
+  tags       = var.tags
+
+  extra_attributes         = [{ name = "employeeId", type = "S" }]
+  global_secondary_indexes = [{ name = "byEmployeeId", hash_key = "employeeId", projection_type = "ALL" }]
 }
 
 # --- Auth ---------------------------------------------------------------
@@ -659,6 +670,40 @@ module "lambda_work_tasks_write" {
   tags                  = var.tags
 }
 
+data "aws_iam_policy_document" "attendance_list" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:Scan", "dynamodb:Query"]
+    resources = [module.attendance_table.arn, "${module.attendance_table.arn}/index/*"]
+  }
+}
+
+module "lambda_attendance_list" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-attendance-list"
+  source_dir            = "${path.module}/lambda-src/attendance-list"
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.attendance_list.json
+  tags                  = var.tags
+}
+
+data "aws_iam_policy_document" "attendance_write" {
+  source_policy_documents = [data.aws_iam_policy_document.read_caller_access.json]
+  statement {
+    actions   = ["dynamodb:PutItem", "dynamodb:GetItem"]
+    resources = [module.attendance_table.arn]
+  }
+}
+
+module "lambda_attendance_write" {
+  source                = "../../modules/lambda-function"
+  name                  = "${local.name}-attendance-write"
+  source_dir            = "${path.module}/lambda-src/attendance-write"
+  environment_variables = local.common_env
+  inline_policy_json    = data.aws_iam_policy_document.attendance_write.json
+  tags                  = var.tags
+}
+
 data "aws_iam_policy_document" "seed" {
   statement {
     actions   = ["dynamodb:PutItem"]
@@ -708,6 +753,8 @@ module "http_api" {
     { route_key = "POST /work-boards/{boardId}/tasks", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
     { route_key = "PATCH /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
     { route_key = "DELETE /work-tasks/{id}", lambda_invoke_arn = module.lambda_work_tasks_write.invoke_arn, lambda_function_name = module.lambda_work_tasks_write.name },
+    { route_key = "GET /attendance", lambda_invoke_arn = module.lambda_attendance_list.invoke_arn, lambda_function_name = module.lambda_attendance_list.name },
+    { route_key = "POST /attendance", lambda_invoke_arn = module.lambda_attendance_write.invoke_arn, lambda_function_name = module.lambda_attendance_write.name },
     { route_key = "GET /resumes", lambda_invoke_arn = module.lambda_resumes_list.invoke_arn, lambda_function_name = module.lambda_resumes_list.name },
     { route_key = "GET /resumes/{id}/resume-url", lambda_invoke_arn = module.lambda_resumes_resume_url.invoke_arn, lambda_function_name = module.lambda_resumes_resume_url.name },
     { route_key = "PATCH /resumes/{id}", lambda_invoke_arn = module.lambda_resumes_write.invoke_arn, lambda_function_name = module.lambda_resumes_write.name },

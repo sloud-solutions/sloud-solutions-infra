@@ -4,7 +4,7 @@
 // across each Lambda's own directory, since each is zipped independently.
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
-export const ALL_PAGES = ["offer-letter", "company-policy", "clients", "expenses", "employees", "work-tracker"];
+export const ALL_PAGES = ["offer-letter", "company-policy", "clients", "expenses", "employees", "work-tracker", "attendance"];
 
 export function json(statusCode, body) {
   return { statusCode, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
